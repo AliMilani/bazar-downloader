@@ -1,0 +1,43 @@
+{
+  "properties": null,
+  "singleReply": {
+    "appDownloadInfoReply": {
+      "token": "222222222222.apk?expire=1&token=redacted&a=",
+      "hashCode": "4aed57bb34bd4272c66d6ca8d9fce9924f4abe10",
+      "cdnPrefix": ["https://appcdn2.cafebazaar.ir/"],
+      "packageSize": "17085754",
+      "versionCode": 260921010,
+      "hasSplits": true,
+      "hasAdditionalFiles": false,
+      "splits": [
+        {
+          "size": "722030",
+          "sha1hash": "10a85e788268b1743b961ff37474e745d9811dab",
+          "relativePath": "apks/206683480734.apk?expire=1&token=redacted",
+          "token": "206683480734",
+          "cdnPrefix": ["https://appcdn2.cafebazaar.ir/"],
+          "splitDiffs": [],
+          "fullPathUrls": [
+            "https://appcdn2.cafebazaar.ir/apks/206683480734.apk?expire=1&token=redacted",
+            "https://arvancdn.cafebazaar.ir/arvan/apks/206683480734.apk?hash=redacted&expires=1"
+          ]
+        },
+        {
+          "size": "609768",
+          "sha1hash": "bd67efe71d2e17f5589139bc9297543879c84c2d",
+          "relativePath": "apks/274556363204.apk?expire=1&token=redacted",
+          "token": "274556363204",
+          "cdnPrefix": ["https://appcdn2.cafebazaar.ir/"],
+          "splitDiffs": [],
+          "fullPathUrls": ["https://appcdn2.cafebazaar.ir/apks/274556363204.apk?expire=1&token=redacted"]
+        }
+      ],
+      "additionalFiles": [],
+      "fullPathUrls": [
+        "https://appcdn2.cafebazaar.ir/apks/222222222222.apk?expire=1&token=redacted&a=.apk",
+        "https://arvancdn.cafebazaar.ir/arvan/apks/222222222222.apk?hash=redacted&expires=1&a=.apk"
+      ],
+      "appName": "Divar"
+    }
+  }
+}

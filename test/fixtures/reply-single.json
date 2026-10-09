@@ -1,0 +1,22 @@
+{
+  "properties": null,
+  "singleReply": {
+    "appDownloadInfoReply": {
+      "token": "111111111111.apk?expire=1&token=redacted&a=",
+      "hashCode": "CFE40E3999F1218598E9958A186FCE0742B1BA0F",
+      "cdnPrefix": ["https://appcdn2.cafebazaar.ir/"],
+      "packageSize": "6943744",
+      "versionCode": 2100261,
+      "multiConnectionDownload": true,
+      "hasSplits": false,
+      "hasAdditionalFiles": false,
+      "splits": [],
+      "additionalFiles": [],
+      "fullPathUrls": [
+        "https://appcdn2.cafebazaar.ir/apks/111111111111.apk?expire=1&token=redacted&a=.apk",
+        "https://arvancdn.cafebazaar.ir/arvan/apks/111111111111.apk?hash=redacted&expires=1&a=.apk"
+      ],
+      "appName": "Torob"
+    }
+  }
+}
