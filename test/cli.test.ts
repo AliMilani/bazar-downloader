@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, test } from 'node:test';
@@ -114,6 +114,49 @@ test('an incomplete version downloads only the missing files', async () => {
   assert.equal(code, 0);
   assert.deepEqual(h.downloads.map((d) => d.dest), [join(dir, 'split-1.apk')]);
   assert.equal(existsSync(join(dir, 'metadata.json')), true);
+});
+
+test('a stored version whose files differ from the reply is refused, not reported as stored', async () => {
+  await run(['ir.divar', '--out', root], harness());
+  const h = harness({
+    getDownloadInfo: async (pkg) => ({
+      ...info,
+      package: pkg,
+      files: [{ name: 'base.apk', urls: ['https://a/universal'], size: 9, sha1: 'c'.repeat(40) }],
+    }),
+  });
+  const code = await run(['ir.divar', '--sdk', '22', '--out', root], h);
+  assert.equal(code, 1);
+  assert.deepEqual(h.out, []);
+  assert.deepEqual(h.downloads, []);
+  assert.deepEqual(h.err, [
+    'ir.divar: version 7 (arm64-v8a) is already stored with different files (stored with --sdk 33); use another --out to keep both',
+  ]);
+  assert.equal((await stat(join(root, 'ir.divar', '7-arm64-v8a', 'base.apk'))).size, 5);
+});
+
+test('an incomplete version holding files from another download is refused and nothing is overwritten', async () => {
+  const dir = join(root, 'ir.divar', '7-arm64-v8a');
+  await mkdir(dir, { recursive: true });
+  await writeFile(join(dir, 'base.apk'), Buffer.alloc(9));
+  const h = harness();
+  const code = await run(['ir.divar', '--out', root], h);
+  assert.equal(code, 1);
+  assert.deepEqual(h.downloads, []);
+  assert.match(h.err.join('\n'), /holds files from a different download \(base\.apk\)/);
+  assert.equal((await stat(join(dir, 'base.apk'))).size, 9);
+  assert.equal(existsSync(join(dir, 'metadata.json')), false);
+});
+
+test('cancelling the link prompt exits 130 without a message', async () => {
+  const h = harness({
+    readLinks: async () => {
+      throw Object.assign(new Error('Aborted with Ctrl+C'), { name: 'AbortError' });
+    },
+  });
+  assert.equal(await run(['--out', root], h), 130);
+  assert.deepEqual(h.err, []);
+  assert.deepEqual(h.infoCalls, []);
 });
 
 test('metadata is not written when a download fails', async () => {

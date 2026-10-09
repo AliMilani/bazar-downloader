@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, test } from 'node:test';
 import type { DownloadInfo } from '../src/bazaar.ts';
-import { hasFile, isComplete, versionDir, writeMetadata } from '../src/store.ts';
+import { foreignFiles, hasFile, readMetadata, versionDir, writeMetadata } from '../src/store.ts';
 
 const info: DownloadInfo = {
   package: 'ir.divar',
@@ -31,11 +31,20 @@ test('versionDir is <out>/<package>/<versionCode>-<abi>', () => {
   assert.equal(versionDir('apks', 'ir.divar', 260921010, 'x86_64'), join('apks', 'ir.divar', '260921010-x86_64'));
 });
 
-test('a directory is complete only once metadata.json exists', async () => {
-  assert.equal(await isComplete(join(dir, 'missing')), false);
-  assert.equal(await isComplete(dir), false);
+test('readMetadata is null until metadata.json exists', async () => {
+  assert.equal(await readMetadata(join(dir, 'missing')), null);
+  assert.equal(await readMetadata(dir), null);
   await writeMetadata(dir, info, { abi: 'arm64-v8a', sdk: 33, source: 'ir.divar', now: new Date(0) });
-  assert.equal(await isComplete(dir), true);
+  assert.equal((await readMetadata(dir))?.sdk, 33);
+});
+
+test('foreignFiles lists stored APKs the expected files do not account for', async () => {
+  await writeFile(join(dir, 'base.apk'), '123456789');
+  await writeFile(join(dir, 'split-1.apk'), '123');
+  await writeFile(join(dir, 'split-9.apk'), '1');
+  await writeFile(join(dir, 'split-2.apk.part'), '1');
+  assert.deepEqual(await foreignFiles(dir, info.files), ['base.apk', 'split-9.apk']);
+  assert.deepEqual(await foreignFiles(join(dir, 'missing'), info.files), []);
 });
 
 test('hasFile needs the exact size', async () => {

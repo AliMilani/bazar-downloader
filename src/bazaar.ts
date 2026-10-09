@@ -31,6 +31,7 @@ export class StoreError extends Error {
 }
 
 const ENDPOINT = 'https://api.cafebazaar.ir/rest-v1/process/AppDownloadInfoRequest';
+const TIMEOUT_MS = 30_000;
 
 const CPU: Record<Abi, string> = {
   'arm64-v8a': 'arm64-v8a,armeabi-v7a,armeabi',
@@ -43,9 +44,11 @@ type Json = Record<string, unknown>;
 
 export async function getDownloadInfo(
   pkg: string,
-  options: { abi: Abi; sdk: number; fetch?: Fetch },
+  options: { abi: Abi; sdk: number; fetch?: Fetch; timeoutMs?: number },
 ): Promise<DownloadInfo> {
+  const timeoutMs = options.timeoutMs ?? TIMEOUT_MS;
   const response = await (options.fetch ?? fetch)(ENDPOINT, {
+    signal: AbortSignal.timeout(timeoutMs),
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify({
@@ -60,6 +63,11 @@ export async function getDownloadInfo(
         appDownloadInfoRequest: { downloadStatus: 1, packageName: pkg, referrers: [] },
       },
     }),
+  }).catch((error: unknown) => {
+    if (error instanceof Error && error.name === 'TimeoutError') {
+      throw new Error(`Cafe Bazaar did not answer within ${timeoutMs / 1000} s`);
+    }
+    throw error;
   });
 
   let body: Json | null;

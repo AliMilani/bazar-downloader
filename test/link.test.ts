@@ -15,6 +15,8 @@ const accepted: [string, string][] = [
   ['  https://cafebazaar.ir/app/ir.divar\n', 'ir.divar'],
   ['cafebazaar.ir/app/ir.divar', 'ir.divar'],
   ['www.cafebazaar.ir/app/ir.divar?l=fa', 'ir.divar'],
+  ['\u200fhttps://cafebazaar.ir/app/ir.divar\u200e', 'ir.divar'],
+  ['\u202bir.divar\u202c', 'ir.divar'],
 ];
 
 for (const [input, expected] of accepted) {

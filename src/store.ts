@@ -1,4 +1,4 @@
-import { rename, stat, writeFile } from 'node:fs/promises';
+import { readdir, readFile, rename, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { Abi, DownloadInfo } from './bazaar.ts';
 
@@ -20,8 +20,31 @@ export function versionDir(out: string, pkg: string, versionCode: number, abi: A
   return join(out, pkg, `${versionCode}-${abi}`);
 }
 
-export async function isComplete(dir: string): Promise<boolean> {
-  return (await sizeOf(join(dir, METADATA))) !== null;
+/** The metadata of a complete version, or null: metadata.json is written last. */
+export async function readMetadata(dir: string): Promise<Metadata | null> {
+  try {
+    return JSON.parse(await readFile(join(dir, METADATA), 'utf8')) as Metadata;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
+    throw error;
+  }
+}
+
+/** Stored APKs that are not one of the expected files at its expected size. */
+export async function foreignFiles(dir: string, expected: { name: string; size: number }[]): Promise<string[]> {
+  let names: string[];
+  try {
+    names = await readdir(dir);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
+    throw error;
+  }
+  const foreign: string[] = [];
+  for (const name of names.filter((entry) => entry.endsWith('.apk')).sort()) {
+    const match = expected.find((file) => file.name === name);
+    if (!match || !(await hasFile(dir, name, match.size))) foreign.push(name);
+  }
+  return foreign;
 }
 
 export async function hasFile(dir: string, name: string, size: number): Promise<boolean> {

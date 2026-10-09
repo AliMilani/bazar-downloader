@@ -47,7 +47,8 @@ after another, and a store or download failure on one does not stop the rest.
 
 Exit codes: `0` every argument stored or already present; `1` at least one
 argument failed; `2` usage error (no link from arguments or standard input,
-unknown option, unknown ABI, non-numeric SDK, unparseable link).
+unknown option, unknown ABI, non-numeric SDK, unparseable link); `130` the
+link prompt was cancelled with Ctrl-C or Ctrl-D (no message, no stack trace).
 
 ### Accepted inputs
 
@@ -57,6 +58,9 @@ unknown option, unknown ABI, non-numeric SDK, unparseable link).
 - the same without a scheme, e.g. `cafebazaar.ir/app/<package>`
 - `bazaar://details?id=<package>`
 - a bare package name, e.g. `ir.divar`
+
+Invisible Unicode format characters (direction marks that chat apps put
+around pasted links) are removed before parsing.
 
 A package name must match `^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)+$`.
 Anything else is an invalid link.
@@ -74,6 +78,12 @@ Anything else is an invalid link.
 - `metadata.json` is written last. A directory that has it is complete and is
   skipped on rerun. A directory without it is incomplete and is resumed.
 - In-flight downloads are written as `<name>.part` and renamed on success.
+- "Already stored" is only reported when the files the store offers now have
+  the same SHA-1 values as the ones in `metadata.json`. If they differ, the
+  argument fails with a message naming the `--sdk` the stored copy came from.
+- An incomplete directory that holds an `.apk` which is not one of the
+  expected files at its expected size is left untouched and the argument
+  fails. Both rules exist so that nothing stored is overwritten or mixed.
 - The store reply does not name splits, so they are named by their numeric
   store token. A split app installs with
   `adb install-multiple <dir>/*.apk`.
@@ -144,8 +154,11 @@ Success is HTTP 200 with `singleReply.appDownloadInfoReply`. Fields used:
 Failure is a non-200 status with `properties.statusCode` and
 `properties.errorMessage` (Persian text). An unknown package returns 404.
 
-Observed behaviour worth knowing: the same app can come back as a split
-bundle at `--sdk 33` and as one universal APK at `--sdk 22`.
+Observed behaviour worth knowing (4 apps, SDK levels 19 to 34, 2026-10-09):
+at low SDK levels the store serves an older version of the app, often as one
+universal APK instead of a split bundle. Under one `versionCode` and ABI the
+files never differed between SDK levels, which is why the SDK level is not
+part of the directory name and a difference is treated as an error.
 
 ### Additional files (OBB)
 
@@ -191,8 +204,10 @@ The command is exposed through `package.json` `bin` (pointing at
 1. `parsePackage` → package name.
 2. `getDownloadInfo` → `DownloadInfo`. Always fetched fresh, because the URLs
    expire.
-3. Resolve `<out>/<package>/<versionCode>-<abi>/`. If `metadata.json` exists,
-   report "already stored" and stop.
+3. Resolve `<out>/<package>/<versionCode>-<abi>/`. If `metadata.json` exists
+   and lists the same files, report "already stored" and stop; if it lists
+   different files, fail. If the directory is incomplete and holds foreign
+   APK files, fail.
 4. For each file in order: skip it if it already exists with the right size;
    otherwise `downloadFile`.
 5. Write `metadata.json`.
@@ -208,6 +223,9 @@ The command is exposed through `package.json` `bin` (pointing at
   the expected hash. On mismatch the `.part` is deleted and the download
   fails, so a rerun starts clean.
 - Only a verified file is renamed into place.
+- A mirror that sends no bytes for 30 seconds, including one that never
+  answers, counts as failed and the next mirror is tried. The store request
+  itself is abandoned after 30 seconds.
 
 ## Errors
 
@@ -216,6 +234,8 @@ The command is exposed through `package.json` `bin` (pointing at
 | Unparseable link, bad option      | Message on stderr, exit 2, nothing downloaded            |
 | Unknown package (404)             | "not found on Cafe Bazaar", argument failed              |
 | Any other store error             | HTTP status plus the server's message, argument failed   |
+| Store silent for 30 s             | "did not answer" message, argument failed                |
+| Stored version has other files    | Message, nothing touched, argument failed                |
 | All mirrors failed                | Message, `.part` kept, argument failed                   |
 | Size or SHA-1 mismatch            | Message, `.part` deleted, argument failed                |
 

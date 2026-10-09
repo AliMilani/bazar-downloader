@@ -17,10 +17,13 @@ export type DownloadOptions = {
   size: number;
   sha1: string;
   onProgress?: (received: number, total: number) => void;
+  idleTimeoutMs?: number;
 };
 
+const IDLE_TIMEOUT_MS = 30_000;
+
 export async function downloadFile(options: DownloadOptions): Promise<void> {
-  const { urls, dest, size, sha1, onProgress } = options;
+  const { urls, dest, size, sha1, onProgress, idleTimeoutMs = IDLE_TIMEOUT_MS } = options;
   const part = `${dest}.part`;
   const failures: string[] = [];
 
@@ -30,7 +33,7 @@ export async function downloadFile(options: DownloadOptions): Promise<void> {
     const have = await sizeOf(part);
     if (have === size) break;
     try {
-      await fetchInto(url, part, have, size, onProgress);
+      await fetchInto(url, part, have, size, idleTimeoutMs, onProgress);
       break;
     } catch (error) {
       failures.push(`${new URL(url).host}: ${error instanceof Error ? error.message : String(error)}`);
@@ -58,24 +61,39 @@ async function fetchInto(
   part: string,
   have: number,
   size: number,
+  idleTimeoutMs: number,
   onProgress: DownloadOptions['onProgress'],
 ): Promise<void> {
-  const response = await fetch(url, { headers: have > 0 ? { Range: `bytes=${have}-` } : {} });
-  if (response.status !== 200 && response.status !== 206) {
-    await response.body?.cancel();
-    throw new Error(`HTTP ${response.status}`);
+  // Node's own limit is five silent minutes; give up on a mirror much sooner.
+  const controller = new AbortController();
+  const idle = setTimeout(() => controller.abort(new Error(`no data for ${idleTimeoutMs / 1000} s`)), idleTimeoutMs);
+  try {
+    const response = await fetch(url, {
+      headers: have > 0 ? { Range: `bytes=${have}-` } : {},
+      signal: controller.signal,
+    });
+    idle.refresh();
+    if (response.status !== 200 && response.status !== 206) {
+      await response.body?.cancel();
+      throw new Error(`HTTP ${response.status}`);
+    }
+    if (!response.body) throw new Error('empty response');
+    const append = response.status === 206;
+    let received = append ? have : 0;
+    const counter = new Transform({
+      transform(chunk: Buffer, _encoding, callback) {
+        idle.refresh();
+        received += chunk.length;
+        onProgress?.(received, size);
+        callback(null, chunk);
+      },
+    });
+    await pipeline(Readable.fromWeb(response.body), counter, createWriteStream(part, { flags: append ? 'a' : 'w' }));
+  } catch (error) {
+    throw controller.signal.aborted ? controller.signal.reason : error;
+  } finally {
+    clearTimeout(idle);
   }
-  if (!response.body) throw new Error('empty response');
-  const append = response.status === 206;
-  let received = append ? have : 0;
-  const counter = new Transform({
-    transform(chunk: Buffer, _encoding, callback) {
-      received += chunk.length;
-      onProgress?.(received, size);
-      callback(null, chunk);
-    },
-  });
-  await pipeline(Readable.fromWeb(response.body), counter, createWriteStream(part, { flags: append ? 'a' : 'w' }));
 }
 
 async function sizeOf(path: string): Promise<number> {

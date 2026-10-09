@@ -15,7 +15,7 @@ Needs Node 22.18 or newer. No build step, no runtime dependencies.
     bazar-dl 'https://cafebazaar.ir/app/ir.divar?l=en'
     bazar-dl ir.divar ir.torob                # package names work too
     bazar-dl ir.divar --abi x86_64            # emulator build
-    bazar-dl ir.divar --sdk 22                # older profile, often one universal APK
+    bazar-dl ir.divar --sdk 22                # old Android: an older version, often one universal APK
     bazar-dl ir.divar --out ~/apk-archive
     cat links.txt | bazar-dl
 
@@ -29,7 +29,8 @@ Quote links on the command line: `?` and `&` mean something to the shell.
 
 The directory of each stored version is printed on standard output; progress
 and messages go to standard error. Exit code is 0 when everything is stored,
-1 when an app failed, 2 on a usage error.
+1 when an app failed, 2 on a usage error, 130 when the link prompt is
+cancelled.
 
 ## What gets stored
 
@@ -41,6 +42,11 @@ and messages go to standard error. Exit code is 0 when everything is stored,
 Every version and ABI is kept side by side and nothing is overwritten. Every
 file is checked against the size and SHA-1 the store reports. A version that
 is already complete is skipped; an interrupted one resumes where it stopped.
+A mirror that sends nothing for 30 seconds is dropped for the next one.
+
+If the store ever answers with different files for a version and ABI that is
+already on disk, the tool refuses instead of overwriting or mixing them; pass
+another `--out` to keep both.
 
 Install a split app with:
 

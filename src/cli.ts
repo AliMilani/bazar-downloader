@@ -5,7 +5,7 @@ import { parseArgs } from 'node:util';
 import { ABIS, getDownloadInfo, type Abi, type DownloadInfo } from './bazaar.ts';
 import { downloadFile, type DownloadOptions } from './download.ts';
 import { InvalidLinkError, parsePackage } from './link.ts';
-import { hasFile, isComplete, versionDir, writeMetadata } from './store.ts';
+import { foreignFiles, hasFile, readMetadata, versionDir, writeMetadata } from './store.ts';
 
 export type Deps = {
   getDownloadInfo: (pkg: string, options: { abi: Abi; sdk: number }) => Promise<DownloadInfo>;
@@ -46,7 +46,16 @@ export async function run(argv: string[], deps: Deps = defaultDeps()): Promise<n
   if (!isAbi(abi)) return usage(`unknown ABI: ${abi}`);
   if (!Number.isInteger(sdk) || sdk < 1) return usage(`--sdk must be a positive integer: ${values.sdk}`);
 
-  const inputs = positionals.length > 0 ? positionals : await deps.readLinks();
+  let inputs = positionals;
+  if (inputs.length === 0) {
+    try {
+      inputs = await deps.readLinks();
+    } catch (error) {
+      // Ctrl-C or Ctrl-D at the prompt.
+      if (error instanceof Error && error.name === 'AbortError') return 130;
+      throw error;
+    }
+  }
   if (inputs.length === 0) return usage('no link given');
 
   const targets: Target[] = [];
@@ -74,9 +83,23 @@ export async function run(argv: string[], deps: Deps = defaultDeps()): Promise<n
 async function storeOne(target: Target, settings: Settings, deps: Deps): Promise<string> {
   const info = await deps.getDownloadInfo(target.pkg, { abi: settings.abi, sdk: settings.sdk });
   const dir = versionDir(settings.out, info.package, info.versionCode, settings.abi);
-  if (await isComplete(dir)) {
+  const stored = await readMetadata(dir);
+  if (stored) {
+    const have = stored.files.map((file) => file.sha1).sort();
+    const want = info.files.map((file) => file.sha1).sort();
+    if (have.join() !== want.join()) {
+      throw new Error(
+        `version ${info.versionCode} (${settings.abi}) is already stored with different files (stored with --sdk ${stored.sdk}); use another --out to keep both`,
+      );
+    }
     deps.stderr(`${target.pkg}: already stored (version ${info.versionCode}, ${settings.abi})`);
     return dir;
+  }
+  const foreign = await foreignFiles(dir, info.files);
+  if (foreign.length > 0) {
+    throw new Error(
+      `${dir} holds files from a different download (${foreign.join(', ')}); remove them or use another --out`,
+    );
   }
 
   await mkdir(dir, { recursive: true });
@@ -154,6 +177,9 @@ async function readLinks(): Promise<string[]> {
     const prompt = createInterface({ input: process.stdin, output: process.stderr });
     try {
       text = await prompt.question('Cafe Bazaar link: ');
+    } catch (error) {
+      process.stderr.write('\n');
+      throw error;
     } finally {
       prompt.close();
     }

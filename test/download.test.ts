@@ -54,6 +54,39 @@ function ranged(log: string[]): RequestListener {
   };
 }
 
+function stalling(): RequestListener {
+  return (_request, response) => {
+    response.writeHead(200, { 'Content-Length': content.length });
+    response.write(content.subarray(0, 10_000));
+  };
+}
+
+test('moves to the next mirror when one stops sending', { timeout: 5000 }, async () => {
+  const log: string[] = [];
+  const stalled = await serve(stalling());
+  const good = await serve(ranged(log));
+  await downloadFile({ urls: [stalled, good], dest, size: content.length, sha1, idleTimeoutMs: 200 });
+  assert.equal(log.length, 1);
+  assert.deepEqual(await readFile(dest), content);
+});
+
+test('moves to the next mirror when one never answers', { timeout: 5000 }, async () => {
+  const mute = await serve(() => {});
+  const good = await serve(ranged([]));
+  await downloadFile({ urls: [mute, good], dest, size: content.length, sha1, idleTimeoutMs: 200 });
+  assert.deepEqual(await readFile(dest), content);
+});
+
+test('reports the stall and keeps the .part when the only mirror stops sending', { timeout: 5000 }, async () => {
+  const stalled = await serve(stalling());
+  await assert.rejects(
+    downloadFile({ urls: [stalled], dest, size: content.length, sha1, idleTimeoutMs: 200 }),
+    (error: unknown) =>
+      error instanceof DownloadError && /all mirrors failed/.test(error.message) && /no data for 0\.2 s/.test(error.message),
+  );
+  assert.equal(existsSync(`${dest}.part`), true);
+});
+
 test('downloads a file, verifies it and leaves no .part', async () => {
   const log: string[] = [];
   const progress: number[] = [];

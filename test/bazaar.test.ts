@@ -146,6 +146,23 @@ test('throws StoreError when the hash is missing', async () => {
   );
 });
 
+test('gives up when the store does not answer in time', { timeout: 2000 }, async () => {
+  const silent: Fetch = (_url, init) =>
+    new Promise((_resolve, reject) => {
+      // A real pending request holds the event loop open; the timeout's own timer does not.
+      const pending = setTimeout(() => {}, 5000);
+      const signal = init?.signal;
+      signal?.addEventListener('abort', () => {
+        clearTimeout(pending);
+        reject(signal.reason);
+      });
+    });
+  await assert.rejects(
+    getDownloadInfo('ir.torob', { abi: 'arm64-v8a', sdk: 33, fetch: silent, timeoutMs: 50 }),
+    /Cafe Bazaar did not answer within 0\.05 s/,
+  );
+});
+
 test('rejects a split token that is not a plain file name', async () => {
   const body = withReply((r) => {
     (r.splits as { token: string }[])[0].token = '../../evil';

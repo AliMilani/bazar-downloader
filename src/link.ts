@@ -10,7 +10,8 @@ const HOSTS = new Set(['cafebazaar.ir', 'www.cafebazaar.ir']);
 const BARE_HOST = /^(www\.)?cafebazaar\.ir\//i;
 
 export function parsePackage(input: string): string {
-  const text = input.trim();
+  // Chat apps wrap pasted links in invisible direction marks.
+  const text = input.replace(/\p{Cf}/gu, '').trim();
   const candidate = PACKAGE.test(text) ? text : fromUrl(BARE_HOST.test(text) ? `https://${text}` : text);
   if (candidate === null || !PACKAGE.test(candidate)) throw new InvalidLinkError(input);
   return candidate;
